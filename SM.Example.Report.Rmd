@@ -1,0 +1,325 @@
+---
+title: "COVID Concern Throughout 2020"
+subtitle: "Kira Flemke"
+output:
+  pdf_document: default
+  html_notebook: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("/Users/kiraflemke/Desktop/Research Projects/Covid Analysis/Report")
+
+library(haven)
+library(questionr)
+library(lubridate)
+library(RColorBrewer)
+library(ggplot2)
+library(scales)
+library(sjlabelled)
+library(dplyr)
+
+load("COVID19 Datafile 29 Sep 09PM_NBC.Rdata")
+
+# save and rename original dataframes 
+covid.dta <- df
+covid.dta.char <- dat
+
+rm(df)
+rm(dat)
+
+dim(covid.dta)
+colnames(covid.dta)
+
+#table(sapply(covid.dta, class))
+
+# reformat dates
+covid.dta$response_date <- ymd(covid.dta$response_date)
+covid.dta.char$response_date <- ymd(covid.dta.char$response_date)
+#summary(covid.dta$response_date) # dates range from 2/11/2020 to 9/29/2020
+
+
+# recode missing observations to NA 
+classes <- sapply(covid.dta.char, FUN = class)
+num.cols <- names(covid.dta.char)[which(classes == "factor")]
+
+covid.dta.char[,num.cols][covid.dta.char[,num.cols] == "No answer"] <- NA
+
+# remove unused response labels
+covid.dta.char[,c(num.cols)] <- sapply(covid.dta.char[,c(num.cols)], FUN = droplevels)
+
+# crosstable: worry about exposure x personally know someone diagnosed
+#head(covid.dta.char$income)
+#table(covid.dta.char$worry_exposure)
+
+# collapse worry exposure variable
+covid.dta.char$worry_exposure <- droplevels(covid.dta.char$worry_exposure)
+worry.resp <- unique(covid.dta.char$worry_exposure)
+covid.dta.char$worry2[covid.dta.char$worry_exposure %in% worry.resp[1:2]] <- "Not Worried"
+covid.dta.char$worry2[covid.dta.char$worry_exposure %in% worry.resp[3:4]] <- "Worried"
+
+# identify the timeline 
+covid.dta.char$response_week <- week(covid.dta.char$response_date)
+#summary(covid.dta.char$response_week)
+
+
+
+```
+
+*Data Source: Survey Monkey Election Poll Data (1.5 million responses) collected periodically between February 11th, 2020 and September 29th, 2020*
+
+\
+ 
+\
+ 
+```{r, echo = FALSE}
+
+# weighted table 
+covtab1 <- wtd.table(x = covid.dta.char$worry_exposure, weights = covid.dta.char$weight_national_18plus_all, na.rm = T)
+#prop.table(covtab1)
+
+# worry over time by week
+covid.dta.char$response_week <- week(covid.dta.char$response_date)
+#summary(covid.dta.char$response_week)
+
+# create crosstabs - weighted by daily response group
+worry.time.tab <- prop.table(xtabs(covid.dta.char$weight_national_18plus_daily ~ covid.dta.char$worry_exposure + covid.dta.char$response_week, 1), 2)
+
+worry.time.df <- as.data.frame(worry.time.tab[1:4,])
+names(worry.time.df) <- c("worry.exp", "week", "prop")
+
+# create color palettes 
+R.pal3 <- brewer.pal(3,"Oranges")
+B.pal3 <- brewer.pal(3,"Purples")
+
+# create objects of x and y value labels (y = months, x = percent)
+months1 <- get_labels(month(covid.dta.char$response_date, label = T))[2:9]
+x.vals1 <- c(seq(6, 39, 4) + 2)
+
+# plot worry over time
+plot1 <- ggplot(worry.time.df) +
+  geom_line(aes(y = as.numeric(as.character(prop)), 
+                x = as.numeric(as.character(week)),
+                group = worry.exp, 
+                color = worry.exp))+
+  scale_color_manual(values = c(R.pal3[3],R.pal3[2],B.pal3[2:3]))+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5), 
+        legend.position = "top")+ 
+  scale_x_continuous(limits = c(6,39),breaks = seq(6, 39, 4), minor_breaks = NULL)+
+  scale_y_continuous(labels = scales::percent, limits = c(0,0.6))+
+  ggtitle("How worried are you that you or someone in your family \n will be exposed to the coronavirus?", ) +
+  xlab("Week of the Year (2020)") +
+  ylab("Percent (weighted)") +
+  labs(col="")
+
+# add labels 
+plot1 + 
+  geom_label(aes(label = months1[1], x = x.vals1[1], y = 0.58), color = "darkgray") + 
+  geom_label(aes(label = months1[2], x = x.vals1[2], y = 0.58), color = "darkgray")+ 
+  geom_label(aes(label = months1[3], x = x.vals1[3], y = 0.58), color = "darkgray")+
+  geom_label(aes(label = months1[4], x = x.vals1[4], y = 0.58), color = "darkgray")+
+  geom_label(aes(label = months1[5], x = x.vals1[5], y = 0.58), color = "darkgray")+
+  geom_label(aes(label = months1[6], x = x.vals1[6], y = 0.58), color = "darkgray")+
+  geom_label(aes(label = months1[7], x = x.vals1[7], y = 0.58), color = "darkgray")+
+  geom_label(aes(label = months1[8], x = x.vals1[8], y = 0.58), color = "darkgray")
+
+```
+
+\
+ 
+
+```{r, echo = FALSE}
+covid.dta.char$party_id <- droplevels(covid.dta.char$party_id)
+
+# broken out by party
+worry.time.tab2 <- prop.table(xtabs(covid.dta.char$weight_national_18plus_daily ~ covid.dta.char$worry2  + covid.dta.char$party_id + covid.dta.char$response_week), c(3,2))
+
+worry.time.df2 <- as.data.frame(worry.time.tab2)
+
+names(worry.time.df2) <- c("worry.exp", "party", "week", "prop")
+worry.time.df2 <-worry.time.df2[worry.time.df2$worry.exp == "Worried",]
+
+Part.pal3 <- brewer.pal(7,"RdYlBu")
+
+plot.party <- ggplot(worry.time.df2) +
+  geom_line(aes(y = as.numeric(as.character(prop)), 
+                x = as.numeric(as.character(week)),
+                group = party, 
+                color = party))+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5), 
+        legend.position = "none")+ 
+  scale_color_manual(values = c(Part.pal3[c(1,7)], "gray40"))+
+  scale_x_continuous(limits = c(6,39),breaks = seq(6, 39, 4), minor_breaks = NULL)+
+  scale_y_continuous(labels = scales::percent, limits = c(0.3,1.15), breaks = seq(0.2, 1,.2))+
+  ggtitle("Percent of party voters worried about coronavirus exposure", ) +
+  xlab("Week of the Year (2020)") +
+  ylab("Percent (weighted)") +
+  labs(col="Party ID:")
+
+# add labels 
+plot.party + 
+  geom_text(aes(label = "Democrat", x = 33, y = 0.95), color = Part.pal3[7], size = 4) + 
+  geom_text(aes(label = "Independent", x = 35, y = 0.78), color = "gray40", size = 4) +
+  geom_text(aes(label = "Republican", x = 37, y = 0.55), color = Part.pal3[1], size = 4) + 
+  geom_label(aes(label = months1[1], x = x.vals1[1], y = 1.1), color = "darkgray") + 
+  geom_label(aes(label = months1[2], x = x.vals1[2], y = 1.1), color = "darkgray")+ 
+  geom_label(aes(label = months1[3], x = x.vals1[3], y = 1.1), color = "darkgray")+
+  geom_label(aes(label = months1[4], x = x.vals1[4], y = 1.1), color = "darkgray")+
+  geom_label(aes(label = months1[5], x = x.vals1[5], y = 1.1), color = "darkgray")+
+  geom_label(aes(label = months1[6], x = x.vals1[6], y = 1.1), color = "darkgray")+
+  geom_label(aes(label = months1[7], x = x.vals1[7], y = 1.1), color = "darkgray")+
+  geom_label(aes(label = months1[8], x = x.vals1[8], y = 1.1), color = "darkgray")
+
+
+```
+
+\
+ 
+
+```{r, echo = FALSE}
+covid.dta.char$income <- droplevels(covid.dta.char$income)
+inc.resp <- unique(covid.dta.char$income)
+
+covid.dta.char$income2 <- NA
+covid.dta.char$income2[covid.dta.char$income %in% inc.resp[c(3,5)]] <- "$100,000 +"
+covid.dta.char$income2[covid.dta.char$income == inc.resp[c(2)]] <- "$50,000 to $99,999"
+covid.dta.char$income2[covid.dta.char$income == inc.resp[c(4)]] <- "$50,000 to $99,999"
+covid.dta.char$income2[covid.dta.char$income == inc.resp[c(6)]] <- "Under $50,000"
+covid.dta.char$income2[covid.dta.char$income == inc.resp[c(7:8)]] <- "Under $50,000"
+#unique(covid.dta.char$income2)
+#table(covid.dta.char$income2)
+
+
+# broken out by income
+worry.time.tab3 <- prop.table(xtabs(covid.dta.char$weight_national_18plus_daily ~ covid.dta.char$worry2  + covid.dta.char$income2 + covid.dta.char$response_week), c(3,2))
+
+worry.time.df3 <- as.data.frame(worry.time.tab3)
+
+names(worry.time.df3) <- c("worry.exp", "income", "week", "prop")
+worry.time.df3 <-worry.time.df3[worry.time.df3$worry.exp == "Worried",]
+
+P.pal4 <- brewer.pal(7,"YlGn")
+
+plot.income <- ggplot(worry.time.df3) +
+  geom_line(aes(y = as.numeric(as.character(prop)), 
+                x = as.numeric(as.character(week)),
+                group = income, 
+                color = income))+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5), 
+        legend.position = "top") +
+  scale_y_continuous(labels = scales::percent, limits = c(0.3,0.9), breaks = seq(.2, 1,.2))+
+  scale_x_continuous(limits = c(6,39),breaks = seq(6, 39, 4), minor_breaks = NULL)+
+  scale_color_manual(values = c(P.pal4[c(7,4)], "goldenrod"))+
+  ggtitle("Percent of voters worried about coronavirus exposure - by income") +
+  xlab("Week of the Year (2020)") +
+  ylab("Percent (weighted)") +
+  labs(col="Annual Income:")
+
+# add labels 
+plot.income + 
+  geom_label(aes(label = months1[1], x = x.vals1[1], y = 0.87), color = "darkgray") + 
+  geom_label(aes(label = months1[2], x = x.vals1[2], y = 0.87), color = "darkgray")+ 
+  geom_label(aes(label = months1[3], x = x.vals1[3], y = 0.87), color = "darkgray")+
+  geom_label(aes(label = months1[4], x = x.vals1[4], y = 0.87), color = "darkgray")+
+  geom_label(aes(label = months1[5], x = x.vals1[5], y = 0.87), color = "darkgray")+
+  geom_label(aes(label = months1[6], x = x.vals1[6], y = 0.87), color = "darkgray")+
+  geom_label(aes(label = months1[7], x = x.vals1[7], y = 0.87), color = "darkgray")+
+  geom_label(aes(label = months1[8], x = x.vals1[8], y = 0.87), color = "darkgray")
+```
+
+
+\
+ 
+
+```{r , echo=FALSE, warning=FALSE}
+covid.dta.char$personally_know <- droplevels(covid.dta.char$personally_know)
+
+#table(covid.dta.char$personally_know)
+
+# worry over time
+covid.dta.char$response_week <- week(covid.dta.char$response_date)
+#summary(covid.dta.char$response_week)
+
+know.time.tab <- prop.table(xtabs(covid.dta.char$weight_national_18plus_daily ~ covid.dta.char$personally_know + covid.dta.char$response_week, 1), 2)
+
+know.time.df <- as.data.frame(know.time.tab)
+names(know.time.df) <- c("know.person", "week", "prop")
+
+know.time.df.w <- know.time.df[know.time.df$know.person == "Yes",]
+  
+know.time.df.w$week <- as.numeric(as.character(know.time.df.w$week))
+#summary(know.time.df.w$week)
+
+months2 <- get_labels(month(covid.dta.char$response_date, label = T))[3:9]
+x.vals2 <- c(seq(10, 39, 4) + 2)
+
+plot.know <- ggplot(know.time.df.w) +
+  geom_line(aes(y = prop, 
+                x = week), color = "mediumvioletred")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_x_continuous(limits = c(10,39),breaks = seq(10, 39, 4), minor_breaks = NULL)+
+  scale_y_continuous(labels = scales::percent, limits = c(0,0.8))+
+  ggtitle("Percent of voters who personally know someone infected with COVID-19", ) +
+  xlab("Week of the Year (2020)") +
+  ylab("Percent (weighted)") 
+
+# add labels 
+
+plot.know + 
+  geom_text(data=filter(know.time.df.w, week %in% c(seq(10, 39, 4))), 
+    aes(y = prop, x = week,label=percent(prop)), 
+    vjust = -1, hjust = .6, size = 3.5, color = "mediumvioletred", alpha = 0.7)+
+  labs(caption="* labels indicate value in the last week of each month") +
+  geom_label(aes(label = months1[1], x = x.vals1[1], y = 0.77), color = "darkgray") + 
+  geom_label(aes(label = months1[2], x = x.vals1[2], y = 0.77), color = "darkgray")+ 
+  geom_label(aes(label = months1[3], x = x.vals1[3], y = 0.77), color = "darkgray")+
+  geom_label(aes(label = months1[4], x = x.vals1[4], y = 0.77), color = "darkgray")+
+  geom_label(aes(label = months1[5], x = x.vals1[5], y = 0.77), color = "darkgray")+
+  geom_label(aes(label = months1[6], x = x.vals1[6], y = 0.77), color = "darkgray")+
+  geom_label(aes(label = months1[7], x = x.vals1[7], y = 0.77), color = "darkgray")+
+  geom_label(aes(label = months1[8], x = x.vals1[8], y = 0.77), color = "darkgray")
+
+```
+
+\
+ 
+ 
+```{r , echo=FALSE}
+# weighted cross table ----
+covtab2 <- wtd.table(x = covid.dta.char$personally_know, weights = covid.dta.char$weight_national_18plus_all, na.rm = T)
+
+Cov1 <- prop.table(xtabs(covid.dta.char$weight_national_18plus_daily ~ covid.dta.char$worry_exposure + covid.dta.char$personally_know), 1)
+
+plot.df.new <- as.data.frame(Cov1)
+names(plot.df.new) <- c("worry", "know.person", "prop")
+
+P.pal2 <- brewer.pal(8,"PuRd")
+
+plot.df.new$know.person <- factor(plot.df.new$know.person, levels = c("Yes", "No"), ordered = T)
+
+ggplot(plot.df.new, 
+       aes(x = worry, y = prop, fill = know.person))+
+  geom_bar(stat = "identity", position = "stack")+
+  geom_text(aes(x = worry, y = ifelse(know.person == "No", prop/2, 1 - prop/2), 
+                                  label = percent(prop)), alpha = 0.8)+
+  scale_y_continuous(breaks = NULL)+
+  theme_minimal()+
+  ggtitle("Proportion of each worry group that personally knows \n someone who has been infected with COVID-19") +
+              xlab("")+ ylab("") + 
+  labs(fill="Do you personally know someone \n that has been infected with COVID-19?")+
+  scale_fill_manual(values = P.pal2[c(5,3)]) +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "top")+
+  coord_flip()
+
+
+
+```
+

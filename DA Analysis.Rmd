@@ -1,0 +1,903 @@
+---
+title: "Philadelphia DA Monthly Outcomes 2014 - 2020"
+author: "Kira Flemke"
+date: "4/23/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(rio)
+library(tidycensus)
+library(tidyverse)
+library(lubridate)
+library(zoo)
+setwd("/Users/kiraflemke/Desktop/R Projects/DA data")
+
+#### DA data ----
+future.dta <- import("future_years_incarceration_data_weekly_by_census_tract.csv")
+
+dispo.dta.orig <- import("time_to_disposition_data_weekly_by_census_tract.txt")
+dispo.dta <- dispo.dta.orig
+dispoX.dta <- dispo.dta.orig
+
+charges.dta.orig <- import("charges_data_weekly_by_census_tract.csv")
+charges.dta <- charges.dta.orig
+chargesX.dta <- charges.dta.orig
+
+dispo.dta.orig <- import("time_to_disposition_data_weekly_by_census_tract.txt")
+dispo.dta <- dispo.dta.orig
+dispoX.dta <- dispo.dta.orig
+
+bail.dta <- import("bail_data_weekly_by_census_tract.txt")
+bail.dta.orig <- bail.dta
+bailX.dta <- bail.dta
+
+arrests.dta <- import("arrest_data_weekly_by_census_tract.csv")
+arrests.dta.orig <- arrests.dta
+arrestsX.dta <- arrests.dta
+
+outcome.dta <- import("case_outcomes_data_weekly_by_census_tract.txt")
+outcome.dta.orig <- outcome.dta
+outcomeX.dta <- outcome.dta
+#### DA & Phil ----
+  # dispositionX -----
+dispoX.dta$date_value <- ymd(dispoX.dta$date_value)
+dispoX.dta$year <- my(as.yearmon(dispoX.dta$date_value, "%Y-%m"))
+
+year.dispoX <- aggregate(x = dispoX.dta[,3:29], by = list(dispoX.dta$year, dispoX.dta$tract_GEOID10), FUN = "sum")
+
+dispoX.dta.TF <- dispoX.dta
+dispoX.dta.TF[,3:29] <- !is.na(dispoX.dta[,3:29])
+year.dispoX.T <- aggregate(x = dispoX.dta.TF[,3:29], by = list(dispoX.dta.TF$year, dispoX.dta.TF$tract_GEOID10), FUN = "sum")
+
+dim(year.dispoX)
+dim(year.dispoX.T)
+
+y.means.dispoX <- cbind(year.dispoX[,1:2] , year.dispoX[,3:29]/year.dispoX.T[,3:29])
+dim(y.means.dispoX) 
+
+  # arrestsX -----
+arrestsX.dta$date_value <- ymd(arrestsX.dta$date_value)
+arrestsX.dta$year <- my(as.yearmon(arrestsX.dta$date_value, "%Y-%m"))
+
+year.arrestsX <- aggregate(x = arrestsX.dta[,3:29], by = list(arrestsX.dta$year, arrestsX.dta$tract_GEOID10), FUN = "sum")
+
+arrestsX.dta.TF <- arrestsX.dta
+arrestsX.dta.TF[,3:29] <- !is.na(arrestsX.dta[,3:29])
+year.arrestsX.T <- aggregate(x = arrestsX.dta.TF[,3:29], by = list(arrestsX.dta.TF$year, arrestsX.dta.TF$tract_GEOID10), FUN = "sum")
+
+dim(year.arrestsX)
+dim(year.arrestsX.T)
+
+y.means.arrestsX <- cbind(year.arrestsX[,1:2] , year.arrestsX[,3:29]/year.arrestsX.T[,3:29])
+dim(y.means.arrestsX) 
+
+  # bailX ----
+bailX.dta$bail_type[bailX.dta$bail_category %in% unique(bailX.dta$bail_category)[4:7]] <- "cash"
+bailX.dta$bail_type[bailX.dta$bail_category %in% unique(bailX.dta$bail_category)[2:3]] <- "non-cash"
+bailX.dta$bail_type[bailX.dta$bail_category %in% unique(bailX.dta$bail_category)[c(1,8:9)]] <- NA
+
+bailX.dta$date_value <- ymd(bailX.dta$date_value)
+bailX.dta$year <- my(as.yearmon(bailX.dta$date_value, "%Y-%m"))
+
+year.bailX <- aggregate( .~ bailX.dta$bail_type + bailX.dta$year + bailX.dta$tract_GEOID10, bailX.dta[,4:29], FUN = sum)
+
+bailX.dta.TF <- bailX.dta
+bailX.dta.TF[bailX.dta.TF == 0] <- NA
+bailX.dta.TF[,4:29] <- !is.na(bailX.dta[,4:29])
+year.bailX.T <- aggregate(x = bailX.dta.TF[,4:29], by = list(bailX.dta$bail_type, bailX.dta.TF$year, bailX.dta.TF$tract_GEOID10), FUN = "sum")
+
+year.bailX.T.long <- pivot_longer(year.bailX,
+                                   cols = c(4:29),
+                                   names_to = "crime",
+                                   values_to = "total")
+
+year.bailX.T.long$type <- NA
+year.bailX.T.long$type[year.bailX.T.long$crime %in% c("Aggravated Assault/Other",
+                                                    "Homicide","Rape", "Other Assaults",
+                                                    "Sexual Assault and Other Sex Offenses")] <- "violent"
+year.bailX.T.long$type[year.bailX.T.long$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                                    "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                                    "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "nonviolent"
+year.bailX.T.long$type[year.bailX.T.long$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                                    "DUI")] <- "nonviolent"
+year.bailX.T.long$type[year.bailX.T.long$crime %in% c("Drug Possession", "Drug Sales")] <- "nonviolent"
+year.bailX.T.long$type[year.bailX.T.long$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+year.bailX.T.long$type[year.bailX.T.long$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+year.bailX.T.long$type[year.bailX.T.long$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "nonviolent"
+
+names(year.bailX.T.long) <- c("bail_type", "year", "GEOID", "crime", "total", "type")
+year.bail.TX <- aggregate(total ~ bail_type + year + GEOID + type, year.bailX.T.long, FUN = sum)
+names(year.bail.TX) <- c("bail_type", "year", "GEOID", "type", "total")
+
+  # chargesX ----
+chargesX.dta$date_value <- ymd(chargesX.dta$date_value)
+chargesX.dta$year <- my(as.yearmon(chargesX.dta$date_value, "%Y-%m"))
+
+year.chargesX <- aggregate(x = chargesX.dta[,3:29], by = list(chargesX.dta$year, chargesX.dta$tract_GEOID10), FUN = "sum")
+
+chargesX.dta.TF <- chargesX.dta
+chargesX.dta.TF[,3:29] <- !is.na(chargesX.dta[,3:29])
+year.chargesX.T <- aggregate(x = chargesX.dta.TF[,3:29], by = list(chargesX.dta.TF$year, chargesX.dta.TF$tract_GEOID10), FUN = "sum")
+
+dim(year.chargesX)
+dim(year.chargesX.T)
+
+y.means.chargesX <- cbind(year.chargesX[,1:2] , year.chargesX[,3:29]/year.chargesX.T[,3:29])
+dim(y.means.chargesX) 
+
+dim(arrests.dta)
+
+  # outcomeX ----
+outcomeX.dta$date_value <- ymd(outcomeX.dta$date_value)
+outcomeX.dta$year <- my(as.yearmon(outcomeX.dta$date_value, "%Y-%m"))
+
+year.outcomeX <- aggregate(x = outcomeX.dta[,4:29], by = list(outcomeX.dta$year, outcomeX.dta$tract_GEOID10, outcomeX.dta$dispoType), FUN = "sum")
+
+outcomeX.dta.TF <- outcomeX.dta
+outcomeX.dta.TF[,4:29] <- !is.na(outcomeX.dta[,4:29])
+year.outcomeX.T <- aggregate(x = outcomeX.dta.TF[,4:29], by = list(outcomeX.dta.TF$year, outcomeX.dta.TF$tract_GEOID10, outcomeX.dta.TF$dispoType), FUN = "sum")
+
+dim(year.outcomeX)
+dim(year.outcomeX.T)
+
+y.means.outcomeX <- cbind(year.outcomeX[,1:2] , year.outcomeX[,4:29]/year.outcomeX.T[,4:29])
+dim(y.means.outcomeX) 
+
+outcomeX.dta$outcome_type[outcomeX.dta$dispoType %in% unique(outcomeX.dta$dispoType)[4:5]] <- "guilty"
+outcomeX.dta$outcome_type[outcomeX.dta$dispoType %in% unique(outcomeX.dta$dispoType)[c(3,6)]] <- "exonerated"
+outcomeX.dta$outcome_type[outcomeX.dta$dispoType %in% unique(outcomeX.dta$dispoType)[1:2]] <- "not prosecuted"
+outcomeX.dta$outcome_type[outcomeX.dta$dispoType %in% unique(outcomeX.dta$dispoType)[7]] <- NA
+
+outcomeX.dta$date_value <- ymd(outcomeX.dta$date_value)
+outcomeX.dta$year <- my(as.yearmon(outcomeX.dta$date_value, "%Y-%m"))
+
+year.outcomeX <- aggregate( .~ outcomeX.dta$outcome_type + outcomeX.dta$year + outcomeX.dta$tract_GEOID10, outcomeX.dta[,4:29], FUN = sum)
+
+outcomeX.dta.TF <- outcomeX.dta
+outcomeX.dta.TF[outcomeX.dta.TF == 0] <- NA
+outcomeX.dta.TF[,4:29] <- !is.na(outcomeX.dta[,4:29])
+year.outcomeX.T <- aggregate(x = outcomeX.dta.TF[,4:29], by = list(outcomeX.dta$outcome_type, outcomeX.dta.TF$year, outcomeX.dta.TF$tract_GEOID10), FUN = "sum")
+
+year.outcomeX.T.long <- pivot_longer(year.outcomeX,
+                                   cols = c(4:29),
+                                   names_to = "crime",
+                                   values_to = "total")
+
+year.outcomeX.T.long$type <- NA
+year.outcomeX.T.long$type[year.outcomeX.T.long$crime %in% c("Aggravated Assault/Other",
+                                                    "Homicide","Rape", "Other Assaults",
+                                                    "Sexual Assault and Other Sex Offenses")] <- "violent"
+year.outcomeX.T.long$type[year.outcomeX.T.long$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                                    "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                                    "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "nonviolent"
+year.outcomeX.T.long$type[year.outcomeX.T.long$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                                    "DUI")] <- "nonviolent"
+year.outcomeX.T.long$type[year.outcomeX.T.long$crime %in% c("Drug Possession", "Drug Sales")] <- "nonviolent"
+year.outcomeX.T.long$type[year.outcomeX.T.long$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+year.outcomeX.T.long$type[year.outcomeX.T.long$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+year.outcomeX.T.long$type[year.outcomeX.T.long$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "nonviolent"
+
+names(year.outcomeX.T.long) <- c("outcome_type", "year", "GEOID", "crime", "total", "type")
+year.outcome.TX <- aggregate(total ~ outcome_type + year + GEOID + type, year.outcomeX.T.long, FUN = sum)
+names(year.outcome.TX) <- c("outcome_type", "year", "GEOID", "type", "total")
+
+# --------- Time to Disposition Analysis --------- ----
+sapply(dispo.dta, class)
+colnames(dispo.dta)
+dispo.dta[dispo.dta == 0] <- NA
+dispo.dta$date_value <- ymd(dispo.dta$date_value)
+dispo.dta$year <- my(as.yearmon(dispo.dta$date_value, "%Y-%m"))
+
+colMeans(dispo.dta[,3:29], na.rm = T)
+
+dispo.dta.orig$date_value <- ymd(dispo.dta.orig$date_value)
+dispo.dta.orig$year <- my(as.yearmon(dispo.dta.orig$date_value, "%Y-%m"))
+
+year.dispo <- aggregate(x = dispo.dta.orig[,3:29], by = list(dispo.dta.orig$year, dispo.dta.orig$tract_GEOID10), FUN = "sum")
+
+dispo.dta.TF <- dispo.dta
+dispo.dta.TF[,3:29] <- !is.na(dispo.dta[,3:29])
+year.dispo.T <- aggregate(x = dispo.dta.TF[,3:29], by = list(dispo.dta.TF$year, dispo.dta.TF$tract_GEOID10), FUN = "sum")
+
+dim(year.dispo)
+dim(year.dispo.T)
+
+y.means.dispo <- cbind(year.dispo[,1:2] , year.dispo[,3:29]/year.dispo.T[,3:29])
+
+#### agg totals by tract & year ----
+
+dispo.dta.orig$totals <- NA
+for(i in 1:nrow(dispo.dta.orig)){
+  dispo.dta.orig$totals[i] <- sum(dispo.dta.orig[i,3:29])
+}
+
+year.dispo.T$totals <- NA
+for(i in 1:nrow(year.dispo.T)){
+  year.dispo.T$totals[i] <- sum(year.dispo.T[i,3:29])
+}
+
+year.dispo.Tx <- aggregate(totals ~ year + tract_GEOID10, data = dispo.dta.orig, FUN = sum)
+
+names(year.dispo.Tx) <- c("year", "district", "mean")
+year.dispo.T.new <- cbind(year.dispo.Tx[ ,1:2] , year.dispo.Tx$mean/year.dispo.T$totals)
+
+
+#### agg totals by district & year ----
+
+district.dta.orig <- import("time_to_disposition_data_daily_by_district.csv")
+district.dta <- district.dta.orig
+
+district.dta.orig$date_value <- ymd(district.dta.orig$date_value)
+district.dta.orig$year <- my(as.yearmon(district.dta$date_value, "%Y-%m"))
+
+district.dta.orig$totals <- NA
+for(i in 1:nrow(district.dta.orig)){
+  district.dta.orig$totals[i] <- sum(district.dta.orig[i,3:29])
+}
+
+district.dta[district.dta == 0] <- NA
+district.dta$date_value <- ymd(district.dta$date_value)
+district.dta$year <- my(as.yearmon(district.dta$date_value, "%Y-%m"))
+
+district.dta.TF <- district.dta
+district.dta.TF[,3:29] <- !is.na(district.dta[,3:29])
+year.district.T <- aggregate(x = district.dta.TF[,3:29], by = list(district.dta.TF$year, district.dta.TF$dc_district), FUN = "sum")
+
+year.district.T$totals <- NA
+for(i in 1:nrow(year.district.T)){
+  year.district.T$totals[i] <- sum(year.district.T[i,3:29])
+}
+
+year.district.Tx <- aggregate(totals ~ year + dc_district, data = district.dta.orig, FUN = sum)
+
+names(year.district.Tx) <- c("year", "district", "mean")
+year.district.T.new <- cbind(year.district.Tx[ ,1:2] , year.district.Tx$mean/year.district.T$totals)
+names(year.district.T.new) <- c("year", "district", "mean")
+
+year.district.T.new <- year.district.T.new[year.district.T.new$mean <= 2000,]
+
+
+#### agg by year ----
+
+year.dispo1 <- aggregate(x = dispo.dta.orig[,3:29], by = list(dispo.dta.orig$year), FUN = "sum")
+
+dispo.dta.TF1 <- dispo.dta
+dispo.dta.TF1[,3:29] <- !is.na(dispo.dta[,3:29])
+year.dispo.T1 <- aggregate(x = dispo.dta.TF[,3:29], by = list(dispo.dta.TF$year), FUN = "sum")
+
+dim(year.dispo1)
+dim(year.dispo.T1)
+
+y.means.dispo1 <- cbind(year.dispo1[,1] , year.dispo1[,2:28]/year.dispo.T1[,2:28])
+
+long.y.means.dispo1 <- pivot_longer(y.means.dispo1,
+                                    cols = c(21:28),
+                                    names_to = "crime",
+                                    values_to = "means")
+long.y.means.dispo1 <- long.y.means.dispo1[,c(1,21:22)]
+names(long.y.means.dispo1) <- c("year", "crime", "mean")
+
+
+long.y.T.dispo1 <- pivot_longer(year.dispo.T1,
+                                    cols = c(2:28),
+                                    names_to = "crime",
+                                    values_to = "total")
+names(long.y.T.dispo1) <- c("year", "crime", "total")
+
+
+long.y.T.dispo2 <- long.y.T.dispo1
+long.y.T.dispo2$type <- NA
+long.y.T.dispo2$type[long.y.T.dispo2$crime %in% c("Aggravated Assault/Other",
+                                                  "Homicide","Rape", "Other Assaults",
+                                                  "Sexual Assault and Other Sex Offenses")] <- "violent"
+long.y.T.dispo2$type[long.y.T.dispo2$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                                  "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                                  "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "property"
+long.y.T.dispo2$type[long.y.T.dispo2$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                                  "DUI")] <- "public order"
+long.y.T.dispo2$type[long.y.T.dispo2$crime %in% c("Drug Possession", "Drug Sales")] <- "drug-related"
+long.y.T.dispo2$type[long.y.T.dispo2$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+long.y.T.dispo2$type[long.y.T.dispo2$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+long.y.T.dispo2$type[long.y.T.dispo2$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "white collar"
+
+long.y.T.dispo2a <- aggregate(total ~ type + year, FUN = "sum", data = long.y.T.dispo2)
+
+
+#### agg by tract ----
+
+dist.dispo1 <- aggregate(x = dispo.dta.orig[,3:29], by = list(dispo.dta.orig$tract_GEOID10), FUN = "sum")
+
+dispo.dta.TF1 <- dispo.dta
+dispo.dta.TF1[,3:29] <- !is.na(dispo.dta[,3:29])
+dist.dispo.T1 <- aggregate(x = dispo.dta.TF[,3:29], by = list(dispo.dta.TF$tract_GEOID10), FUN = "sum")
+
+dim(dist.dispo1)
+dim(dist.dispo.T1)
+
+d.means.dispo1 <- cbind(year.dispo1[,1] , year.dispo1[,2:28]/year.dispo.T1[,2:28])
+
+long.y.means.dispo1 <- pivot_longer(d.means.dispo1,
+                                    cols = c(21:28),
+                                    names_to = "crime",
+                                    values_to = "means")
+long.y.means.dispo1 <- long.y.means.dispo1[,c(1,21:22)]
+names(long.y.means.dispo1) <- c("district", "crime", "mean")
+
+
+
+
+
+# --------- Charges Analysis -------------
+#### total charges type per year ----
+sapply(charges.dta, class)
+colnames(charges.dta)
+charges.dta[charges.dta == 0] <- NA
+charges.dta$date_value <- ymd(charges.dta$date_value)
+charges.dta$year <- my(as.yearmon(charges.dta$date_value, "%Y-%m"))
+
+colMeans(charges.dta[,3:29], na.rm = T)
+
+# total # annual charges (sum) likely same as total number for time disp data
+charge.sums <- aggregate(charges.dta[,3:29], by = list(charges.dta$year), FUN = "sum", na.rm = T)
+
+long.charge.sums <- pivot_longer(charge.sums,
+                                cols = c(2:28),
+                                names_to = "crime",
+                                values_to = "total")
+names(long.charge.sums) <- c("year", "crime", "total")
+
+
+long.y.T.charge2 <- long.charge.sums
+long.y.T.charge2$type <- NA
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Aggravated Assault/Other",
+                                                  "Homicide","Rape", "Other Assaults",
+                                                  "Sexual Assault and Other Sex Offenses")] <- "violent"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                                  "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                                  "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "property"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                                  "DUI")] <- "public order"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Drug Possession", "Drug Sales")] <- "drug-related"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "white collar"
+
+long.y.T.charge2a <- aggregate(total ~ type + year, FUN = "sum", data = long.y.T.charge2)
+
+long.y.T.charge2ax <- long.y.T.charge2a[year(long.y.T.charge2a$year) >= "2014" & year(long.y.T.charge2a$year) <= "2020",]  
+
+#### avg case length (avg days per charge each year) ----
+year.dispo1.long <- pivot_longer(year.dispo1,
+                                 cols = c(2:28),
+                                 names_to = "crime",
+                                 values_to = "total")
+names(year.dispo1.long) <- c("year", "crime", "total.days")
+
+cr.disp.dta <- merge(year.dispo1.long, long.charge.sums, by = c("year", "crime"), all = F)
+
+cr.disp.dta2 <- cr.disp.dta
+cr.disp.dta2$type <- NA
+cr.disp.dta2$type[cr.disp.dta2$crime %in% c("Aggravated Assault/Other",
+                                                    "Homicide","Rape", "Other Assaults",
+                                                    "Sexual Assault and Other Sex Offenses")] <- "violent"
+cr.disp.dta2$type[cr.disp.dta2$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                                    "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                                    "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "property"
+cr.disp.dta2$type[cr.disp.dta2$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                                    "DUI")] <- "public order"
+cr.disp.dta2$type[cr.disp.dta2$crime %in% c("Drug Possession", "Drug Sales")] <- "drug-related"
+cr.disp.dta2$type[cr.disp.dta2$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+cr.disp.dta2$type[cr.disp.dta2$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+cr.disp.dta2$type[cr.disp.dta2$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "white collar"
+
+cr.disp.dta2 <- cr.disp.dta2[,-c(2)]
+cr.disp.dta2a <- aggregate(. ~ type + year, cr.disp.dta2, sum)
+cr.disp.dta2a$mean <- cr.disp.dta2a$total.days/cr.disp.dta2a$total
+
+cr.disp.dta2ax <- cr.disp.dta2a[year(cr.disp.dta2a$year) >= "2014" & year(cr.disp.dta2a$year) <= "2020",]  
+
+# --------- Arrest Analysis -------------
+#### arrests per type per year ----
+sapply(arrests.dta, class)
+colnames(arrests.dta)
+arrests.dta[arrests.dta == 0] <- NA
+arrests.dta$date_value <- ymd(arrests.dta$date_value)
+arrests.dta$year <- my(as.yearmon(arrests.dta$date_value, "%Y-%m"))
+
+colMeans(arrests.dta[,3:29], na.rm = T)
+
+# total # annual arrests (sum) likely same as total number for time disp data
+arrest.sums <- aggregate(arrests.dta[,3:29], by = list(arrests.dta$year), FUN = "sum", na.rm = T)
+
+long.arrest.sums <- pivot_longer(arrest.sums,
+                                 cols = c(2:28),
+                                 names_to = "crime",
+                                 values_to = "total")
+names(long.arrest.sums) <- c("year", "crime", "total")
+
+long.y.T.arrest2 <- long.arrest.sums
+long.y.T.arrest2$type <- NA
+long.y.T.arrest2$type[long.y.T.arrest2$crime %in% c("Aggravated Assault/Other",
+                                                    "Homicide","Rape", "Other Assaults",
+                                                    "Sexual Assault and Other Sex Offenses")] <- "violent"
+long.y.T.arrest2$type[long.y.T.arrest2$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                                    "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                                    "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "property"
+long.y.T.arrest2$type[long.y.T.arrest2$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                                    "DUI")] <- "public order"
+long.y.T.arrest2$type[long.y.T.arrest2$crime %in% c("Drug Possession", "Drug Sales")] <- "drug-related"
+long.y.T.arrest2$type[long.y.T.arrest2$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+long.y.T.arrest2$type[long.y.T.arrest2$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+long.y.T.arrest2$type[long.y.T.arrest2$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "white collar"
+
+long.y.T.arrest2a <- aggregate(total ~ type + year, FUN = "sum", data = long.y.T.arrest2)
+
+long.y.T.arrest2ax <- long.y.T.arrest2a[year(long.y.T.arrest2a$year) >= "2014" & year(long.y.T.arrest2a$year) <= "2020",]
+
+DApal <- c("magenta4", "mediumpurple4", "indianred4", "steelblue4", "aquamarine4" , "darkslategray4", "plum4")
+
+library(scales)
+library(RColorBrewer)
+library(ggrepel)
+DApal <- brewer.pal(11, "Spectral")
+
+data_start <- filter(long.y.T.arrest2ax, year(long.y.T.arrest2ax$year) == "2014")
+data_mid <- filter(long.y.T.arrest2ax, year(long.y.T.arrest2ax$year) == "2018")
+data_end <- filter(long.y.T.arrest2ax, year(long.y.T.arrest2ax$year) == "2020")
+
+data_mid$change <- (data_mid$total - data_start$total)/data_start$total
+data_end$change <- (data_end$total - data_mid$total)/data_mid$total
+
+data_mid$change2  <- c("- 16.5%", "- 16.6%", "- 12.1%", "- 38.3%",
+                       "- 30.0%", "- 20.0%", "- 33.1%")
+data_end$change2  <- c("- 49.1%", "+ 36.7%", "+ 26.4%", "- 9.1%",
+                       "- 53.3%", "- 11.9%", "- 4.0%")
+
+ggplot(long.y.T.arrest2ax, 
+       aes(y = total, x = year, group = type, color = type)) +
+  geom_line(size = 1.3)+
+  geom_text(aes(label = change2, color = type), data = data_end,
+            fontface ="bold" ,  size = 3.5, show.legend = FALSE, hjust = -.25)+
+  geom_text_repel(aes(label = change2, color = type), data = data_mid,
+            fontface ="bold" ,  size = 3.5, show.legend = FALSE, 
+            point.padding = .2, force_pull = -9.4, nudge_x = -.17, force =9)+
+  ggtitle(" \n Change in Total Annual Arrests 2014-2020 \n ") +
+  xlab("") +
+  ylab("") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12))+ 
+  scale_x_continuous(limits = c(2014,2020.5), breaks = seq(2014,2020,1))+
+  scale_y_continuous(limits = c(0,15000), breaks = seq(0,15000,3000))+
+  scale_color_manual(values = c(DApal[c(1,3,5,8:11)]))+ 
+  labs(col="") + 
+  geom_vline(xintercept = 2018, color = "gray", linetype = "dashed")+
+  geom_label(aes(label = "DA Williams admin", x = 2014.8, y = 14500), color = "darkgray") +
+  geom_label(aes(label = "DA Krasner elected", x = 2018, y = 14500), color = "darkgray")
+
+#### ratio - charges to arrest ----
+ar.disp.dta <- merge(long.arrest.sums, long.charge.sums, by = c("year", "crime"), all = F)
+names(ar.disp.dta)[3:4] <- c("total.arrests", "total.charges")
+
+ar.disp.dta2 <- ar.disp.dta
+ar.disp.dta2$type <- NA
+ar.disp.dta2$type[ar.disp.dta2$crime %in% c("Aggravated Assault/Other",
+                                            "Homicide","Rape", "Other Assaults",
+                                            "Sexual Assault and Other Sex Offenses")] <- "violent"
+ar.disp.dta2$type[ar.disp.dta2$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                            "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                            "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "property"
+ar.disp.dta2$type[ar.disp.dta2$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                            "DUI")] <- "public order"
+ar.disp.dta2$type[ar.disp.dta2$crime %in% c("Drug Possession", "Drug Sales")] <- "drug-related"
+ar.disp.dta2$type[ar.disp.dta2$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+ar.disp.dta2$type[ar.disp.dta2$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+ar.disp.dta2$type[ar.disp.dta2$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "white collar"
+
+ar.disp.dta2 <- ar.disp.dta2[,-c(2)]
+ar.disp.dta2a <- aggregate(. ~ type + year, ar.disp.dta2, sum)
+ar.disp.dta2a$ratio <- ar.disp.dta2a$total.arrests/ar.disp.dta2a$total.charges
+
+ar.disp.dta2ax <- ar.disp.dta2a[year(ar.disp.dta2a$year) >= "2014" & year(ar.disp.dta2a$year) <= "2020",]  
+
+ggplot(ar.disp.dta2ax) +
+  geom_line(aes(y = ratio, x = year,
+                group = type, 
+                color = type))
+
+# --------- Bail Analysis -------------
+#### prop bail type per arrest type per year ----
+sapply(bail.dta, class)
+colnames(bail.dta)
+bail.dta[bail.dta == 0] <- NA
+bail.dta$date_value <- ymd(bail.dta$date_value)
+bail.dta$year <- my(as.yearmon(bail.dta$date_value, "%Y-%m"))
+
+bail.dta.orig$date_value <- ymd(bail.dta.orig$date_value)
+bail.dta.orig$year <- my(as.yearmon(bail.dta.orig$date_value, "%Y-%m"))
+
+long.bail.dta <- pivot_longer(bail.dta.orig,
+                               cols = c(4:30),
+                               names_to = "crime",
+                               values_to = "total")
+long.bail.dta2 <- long.bail.dta
+long.bail.dta2$type <- NA
+long.bail.dta2$type[long.bail.dta2$crime %in% c("Aggravated Assault/Other",
+                                            "Homicide","Rape", "Other Assaults",
+                                            "Sexual Assault and Other Sex Offenses")] <- "violent"
+long.bail.dta2$type[long.bail.dta2$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                            "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                            "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "property"
+long.bail.dta2$type[long.bail.dta2$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                            "DUI")] <- "public order"
+long.bail.dta2$type[long.bail.dta2$crime %in% c("Drug Possession", "Drug Sales")] <- "drug-related"
+long.bail.dta2$type[long.bail.dta2$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+long.bail.dta2$type[long.bail.dta2$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+long.bail.dta2$type[long.bail.dta2$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "white collar"
+
+# total # annual bail (sum) likely same as total number for time disp data
+long.bail.sums <- aggregate(total ~ year + bail_category + type, data =long.bail.dta2 , FUN = sum)
+
+long.arrest.sums2 <- long.arrest.sums
+long.arrest.sums2$type <- NA
+long.arrest.sums2$type[long.arrest.sums2$crime %in% c("Aggravated Assault/Other",
+                                                "Homicide","Rape", "Other Assaults",
+                                                "Sexual Assault and Other Sex Offenses")] <- "violent"
+long.arrest.sums2$type[long.arrest.sums2$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                                "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                                "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "property"
+long.arrest.sums2$type[long.arrest.sums2$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                                "DUI")] <- "public order"
+long.arrest.sums2$type[long.arrest.sums2$crime %in% c("Drug Possession", "Drug Sales")] <- "drug-related"
+long.arrest.sums2$type[long.arrest.sums2$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+long.arrest.sums2$type[long.arrest.sums2$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+long.arrest.sums2$type[long.arrest.sums2$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "white collar"
+long.arrest.sums2a <- aggregate(total ~ year + type, data =long.arrest.sums2 , FUN = sum)
+
+bail.merge <- merge(long.bail.sums, long.arrest.sums2a, by = c("year", "type"), all.x = T)
+names(bail.merge)[4:5] <- c("total.bail", "total.arrest")
+
+bail.merge$prop <- bail.merge$total.bail/bail.merge$total.arrest
+
+bail.mergex <- bail.merge[year(bail.merge$year) >= "2014" & year(bail.merge$year) <= "2020",]    
+bail.mergex <- bail.mergex[bail.mergex$bail_category != "Total" & bail.mergex$bail_category != "Held Without Bail" &
+                            bail.mergex$bail_category != "Unknown bail", ]
+ggplot(bail.mergex) +
+  geom_line(aes(y = prop, x = year,
+                group = type, 
+                color = type)) +
+  facet_wrap(vars(bail_category))
+
+
+
+# --------- Outcome Analysis -------------
+#### total outcome type per year ----
+sapply(charges.dta, class)
+colnames(charges.dta)
+charges.dta[charges.dta == 0] <- NA
+charges.dta$date_value <- ymd(charges.dta$date_value)
+charges.dta$year <- my(as.yearmon(charges.dta$date_value, "%Y-%m"))
+
+
+colMeans(charges.dta[,3:29], na.rm = T)
+
+# total # annual charges (sum) likely same as total number for time disp data
+charge.sums <- aggregate(charges.dta[,3:29], by = list(charges.dta$year), FUN = "sum", na.rm = T)
+
+long.charge.sums <- pivot_longer(charge.sums,
+                                 cols = c(2:28),
+                                 names_to = "crime",
+                                 values_to = "total")
+names(long.charge.sums) <- c("year", "crime", "total")
+
+ggplot(long.charge.sums) +
+  geom_line(aes(y = total, x = year,
+                group = crime, 
+                color = crime))  
+
+long.y.T.charge2 <- long.charge.sums
+long.y.T.charge2$type <- NA
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Aggravated Assault/Other",
+                                                    "Homicide","Rape", "Other Assaults",
+                                                    "Sexual Assault and Other Sex Offenses")] <- "violent"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                                    "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                                    "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "property"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                                    "DUI")] <- "public order"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Drug Possession", "Drug Sales")] <- "drug-related"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+long.y.T.charge2$type[long.y.T.charge2$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "white collar"
+
+long.y.T.charge2a <- aggregate(total ~ type + year, FUN = "sum", data = long.y.T.charge2)
+
+long.y.T.charge2ax <- long.y.T.charge2a[year(long.y.T.charge2a$year) >= "2014" & year(long.y.T.charge2a$year) <= "2020",]  
+ggplot(long.y.T.charge2ax) +
+  geom_line(aes(y = total, x = year,
+                group = type, 
+                color = type))
+
+#### prop outcome type per charge type per year ----
+sapply(outcome.dta, class)
+colnames(outcome.dta)
+outcome.dta$date_value <- ymd(outcome.dta$date_value)
+outcome.dta$year <- my(as.yearmon(outcome.dta$date_value, "%Y-%m"))
+
+
+outcome.dta.orig$date_value <- ymd(outcome.dta.orig$date_value)
+outcome.dta.orig$year <- my(as.yearmon(outcome.dta.orig$date_value, "%Y-%m"))
+
+
+long.outcome.dta <- pivot_longer(outcome.dta.orig,
+                              cols = c(4:30),
+                              names_to = "crime",
+                              values_to = "total")
+long.outcome.dta2 <- long.outcome.dta
+long.outcome.dta2$type <- NA
+long.outcome.dta2$type[long.outcome.dta2$crime %in% c("Aggravated Assault/Other",
+                                                "Homicide","Rape", "Other Assaults",
+                                                "Sexual Assault and Other Sex Offenses")] <- "violent"
+long.outcome.dta2$type[long.outcome.dta2$crime %in% c("Theft from Person", "Theft", "Robbery/Other", "Retail Theft",
+                                                "Theft from Auto", "Burglary/Residential", "Burglary/Residential",
+                                                "Burglary/Commercial", "Theft of Motor Vehicle Tag")] <- "property"
+long.outcome.dta2$type[long.outcome.dta2$crime %in% c("Prostitution/Sex Work", "Patronizing Prostitutes",
+                                                "DUI")] <- "public order"
+long.outcome.dta2$type[long.outcome.dta2$crime %in% c("Drug Possession", "Drug Sales")] <- "drug-related"
+long.outcome.dta2$type[long.outcome.dta2$crime %in% c("Aggravated Assault/Gun", "Non-Fatal Shooting")] <- "gun violence"
+long.outcome.dta2$type[long.outcome.dta2$crime %in% c("Illegal Firearms Possession", "Robbery/Gun")] <- "gun crime"
+long.outcome.dta2$type[long.outcome.dta2$crime %in% c("Fraud/Theft of Services", "Embezzlement")] <- "white collar"
+
+# total # annual outcome (sum) likely same as total number for time disp data
+long.outcome.sums <- aggregate(total ~ year + dispoType + type, data =long.outcome.dta2 , FUN = sum)
+
+out.merge <- merge(long.outcome.sums, long.y.T.charge2a, by = c("year", "type"), all.x = T)
+names(out.merge)[4:5] <- c("total.outcome", "total.charges")
+
+out.merge$prop <- out.merge$total.outcome/out.merge$total.charges
+
+out.mergex <- out.merge[year(out.merge$year) >= "2014" & year(out.merge$year) <= "2020",]    
+out.mergex <- out.mergex[out.mergex$dispoType != "Total", ]
+ggplot(out.mergex) +
+  geom_line(aes(y = prop, x = year,
+                group = type, 
+                color = type)) +
+  facet_wrap(vars(dispoType))
+
+
+
+```
+
+## Annual Arrests
+```{r , echo=FALSE}
+#### annual arrests ----
+library(scales)
+library(RColorBrewer)
+library(ggrepel)
+DApal <- brewer.pal(11, "Spectral")
+
+data_start <- filter(long.y.T.arrest2ax, year(long.y.T.arrest2ax$year) == "2014")
+data_mid <- filter(long.y.T.arrest2ax, year(long.y.T.arrest2ax$year) == "2018")
+data_end <- filter(long.y.T.arrest2ax, year(long.y.T.arrest2ax$year) == "2020")
+
+data_mid$change <- (data_mid$total - data_start$total)/data_start$total
+data_end$change <- (data_end$total - data_mid$total)/data_mid$total
+
+data_mid$change2  <- c("- 16.5%", "- 16.6%", "- 12.1%", "- 38.3%",
+                       "- 30.0%", "- 20.0%", "- 33.1%")
+data_end$change2  <- c("- 49.1%", "+ 36.7%", "+ 26.4%", "- 9.1%",
+                       "- 53.3%", "- 11.9%", "- 4.0%")
+set.seed(55)
+ggplot(long.y.T.arrest2ax, 
+       aes(y = total, x = year, group = type, color = type)) +
+  geom_line(size = 1.3)+
+  geom_text(aes(label = change2, color = type), data = data_end,
+            fontface ="bold" ,  size = 2.5, show.legend = FALSE, hjust = -.15)+
+  geom_text_repel(aes(label = change2, color = type), data = data_mid,
+                  fontface ="bold" ,  size = 2.5, show.legend = FALSE,
+                  nudge_x = -.15, vjust = c(0.4,0.5,0.5,-1.1,0.5,.8,.5))+
+  #geom_text_repel(aes(label = change2, color = type), data = data_mid,
+                  #fontface ="bold" ,  size = 3.5, show.legend = FALSE, 
+                  #point.padding = .2, force_pull = -9.4, nudge_x = -.17, force =9)+
+  ggtitle(" \n Change in Total Annual Arrests 2014-2020 \n ") +
+  xlab("") +
+  ylab("") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12))+ 
+  scale_x_continuous(limits = c(2014,2020.5), breaks = seq(2014,2020,1))+
+  scale_y_continuous(limits = c(0,15000), breaks = seq(0,15000,3000))+
+  scale_color_manual(values = c(DApal[c(1,3,5,8:11)]))+ 
+  labs(col="") + 
+  geom_vline(xintercept = 2018, color = "gray", linetype = "dashed")+
+  geom_label(aes(label = "DA Williams admin", x = 2015, y = 14500), color = "darkgray") +
+  geom_label(aes(label = "DA Krasner elected", x = 2018, y = 14500), color = "darkgray")
+
+```
+
+## Annual Bail
+```{r , echo=FALSE}
+bail.mergex$bail_type[bail.mergex$bail_category %in% unique(bail.mergex$bail_category)[c(2:4,6)]] <- "cash"
+bail.mergex$bail_type[bail.mergex$bail_category %in% unique(bail.mergex$bail_category)[c(1,5)]] <- "non-cash"
+
+bail.mergexX <- aggregate(.~ bail.mergex$bail_type + bail.mergex$year + bail.mergex$type, data = bail.mergex[4:6], FUN = sum)
+names(bail.mergexX) <- c("bail_type", "year", "type", "total.bail", "total.arrest", "prop")
+
+bail.mergexX$prop2 <- bail.mergexX$total.bail/bail.mergexX$total.arrest
+
+ggplot(bail.mergexX, 
+       aes(y = prop2, x = year, group = type, color = type))+
+  facet_wrap(vars(bail_type))+
+  geom_line(size = .8)+
+  ggtitle(" \n Cash Bail Frequency 2014-2020 \n ") +
+  xlab("") +
+  ylab("proportion of all arrests (within each category)") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 12),
+        legend.text = element_text(size = 8),
+        legend.position = "bottom",
+        panel.border = element_rect(colour = "black", fill=NA, size=.5))+ 
+  scale_x_continuous(limits = c(2014,2020), breaks = seq(2014,2020,1))+
+  scale_y_continuous(limits = c(0,0.5), breaks = seq(0,1,.2))+
+  scale_color_manual(values = c(DApal[c(1,3,5,8:11)]))+ 
+  labs(col="") + 
+  geom_vline(xintercept = 2018, color = "gray", linetype = "dashed")+
+  guides(colour = guide_legend(nrow = 1))
+```
+
+```{r , echo=FALSE}
+#### annual bail ----
+library(scales)
+library(RColorBrewer)
+library(ggrepel)
+DApal <- brewer.pal(11, "Spectral")
+
+ggplot(bail.mergex, 
+       aes(y = prop, x = year, group = type, color = type)) +
+  facet_wrap(vars(bail_category))+
+  geom_line(size = .8)+
+  ggtitle(" \n Bail Value Frequency 2014-2020 \n ") +
+  xlab("") +
+  ylab("proportion of all arrests (within each category)") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.position = "bottom",
+        panel.border = element_rect(colour = "black", fill=NA, size=.5))+ 
+  scale_x_continuous(limits = c(2014,2020), breaks = seq(2014,2020,1))+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,.2))+
+  scale_color_manual(values = c(DApal[c(1,3,5,8:11)]))+ 
+  labs(col="") + 
+  geom_vline(xintercept = 2018, color = "gray", linetype = "dashed")+
+  guides(colour = guide_legend(nrow = 1))
+
+
+```
+
+## Ratio of Charges to Arrests
+```{r , echo=FALSE}
+#### charges to arrest ratio ----
+ggplot(ar.disp.dta2ax) +
+  geom_line(aes(y = ratio, x = year,
+                group = type, 
+                color = type), size = 1.3)+
+  ggtitle(" \n Ratio of Charges to Arrests 2014-2020 \n ") +
+  xlab("") +
+  ylab("proportion of all arrests (within each category)") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12),
+        panel.border = element_rect(colour = "black", fill=NA, size=.5))+ 
+  scale_x_continuous(limits = c(2014,2020), breaks = seq(2014,2020,1))+
+  #scale_y_continuous(limits = c(0,2), breaks = seq(0,2,.2))+
+  scale_color_manual(values = c(DApal[c(1,3,5,8:11)]))+ 
+  labs(col="") + 
+  geom_vline(xintercept = 2018, color = "gray", linetype = "dashed")
+
+
+```
+
+## Average Case Length
+```{r , echo=FALSE}
+#### avg case length ----
+
+ggplot(cr.disp.dta2ax) +
+  geom_line(aes(y = mean, x = year,
+                group = type, 
+                color = type), size = 1.3)+
+  #geom_text(aes(label = change2, color = type), data = data_end,
+  #          fontface ="bold" ,  size = 3.5, show.legend = FALSE, hjust = -.25)+
+  #geom_text_repel(aes(label = change2, color = type), data = data_mid,
+   #               fontface ="bold" ,  size = 3.5, show.legend = FALSE, 
+   #               point.padding = .2, force_pull = -9.4, nudge_x = -.17, force =9)+
+  ggtitle(" \n Average Case Length 2014-2020 \n ") +
+  xlab("") +
+  ylab("Days from initial charges to case resolution") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12))+ 
+  scale_x_continuous(limits = c(2014,2020.5), breaks = seq(2014,2020,1))+
+  scale_y_continuous(limits = c(0,400), breaks = seq(0,400,100))+
+  scale_color_manual(values = c(DApal[c(1,3,5,8:11)]))+ 
+  labs(col="") + 
+  geom_vline(xintercept = 2018, color = "gray", linetype = "dashed")+
+  geom_label(aes(label = "DA Williams admin", x = 2014.8, y = 380), color = "darkgray") +
+  geom_label(aes(label = "DA Krasner elected", x = 2018, y = 380), color = "darkgray")
+
+```
+
+## Case Outcomes
+```{r , echo=FALSE, warning=FALSE}
+
+all.cases <- aggregate(total ~ year + type , data = year.outcome.TX, FUN = sum)
+
+year.outcome.TX1 <- aggregate(total ~ year + type + outcome_type, data = year.outcome.TX, FUN = sum)
+
+year.outcome.TXX <- merge(year.outcome.TX1, all.cases, by = c("year", "type"), all = T)
+
+year.outcome.TXX$out.prop <- year.outcome.TXX$total.x/year.outcome.TXX$total.y
+  
+DApal2 <- brewer.pal(4, "Spectral")
+
+ggplot(year.outcome.TXX, 
+       aes(y = out.prop, x = year, group = type, color = type))+
+  facet_wrap(vars(outcome_type))+
+  geom_line(size = .8)+
+  ggtitle(" \n Case Outcome Frequency 2014-2020 \n ") +
+  xlab("") +
+  ylab("proportion of all cases (within each category)") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 12),
+        legend.text = element_text(size = 8),
+        legend.position = "bottom",
+        panel.border = element_rect(colour = "black", fill=NA, size=.5))+ 
+  scale_x_continuous(limits = c(2014,2020), breaks = seq(2014,2020,1))+
+  scale_y_continuous(limits = c(0,01), breaks = seq(0,1,.2))+
+  scale_color_manual(values = c(DApal2))+ 
+  labs(col="") + 
+  geom_vline(xintercept = 2018, color = "gray", linetype = "dashed")+
+  guides(colour = guide_legend(nrow = 1))
+```
+
+```{r , echo=FALSE}
+#### annual outcomes per charge type ----
+ggplot(out.mergex) +
+  geom_line(aes(y = prop, x = year,
+                group = type, 
+                color = type), size = .8) +
+  facet_wrap(vars(dispoType))+
+  ggtitle(" \n Case Resolution Frequency 2014-2020 \n ") +
+  xlab("") +
+  ylab("proportion of all cases (within each category)") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.position = "bottom",
+        panel.border = element_rect(colour = "black", fill=NA, size=.5))+ 
+  scale_x_continuous(limits = c(2014,2020), breaks = seq(2014,2020,1))+
+  scale_y_continuous(limits = c(0,1), breaks = seq(0,1,.2))+
+  scale_color_manual(values = c(DApal[c(1,3,5,8:11)]))+ 
+  labs(col="") + 
+  geom_vline(xintercept = 2018, color = "gray", linetype = "dashed")+
+  guides(colour = guide_legend(nrow = 1))
+
+
+
+
+```
+
