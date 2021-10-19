@@ -1,0 +1,889 @@
+---
+title: "Philadelphia and Baltimore: Housing Conditions"
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(leaflet)
+library(mapboxapi)
+Mapbox.token <- "pk.eyJ1Ijoia2lyYWYiLCJhIjoiY2tnMmI1ZXZuMDIxazJxbzQydWtremFtciJ9.LnmP6QIk_-H1k4LD2Dw_Bg"
+mb_access_token(Mapbox.token, install = TRUE)
+Sys.setenv(MAPBOX_PUBLIC_TOKEN = Mapbox.token)
+
+library(magrittr)
+library(tidycensus)
+library(tidyr)
+library(dplyr)
+library(RColorBrewer)
+library(rio)
+library(knitr)
+library(sf)
+library("rgdal")
+library("tidycensus")
+library("tidyverse")
+#options(tigris_use_cache = TRUE)
+library("flexdashboard")
+
+#setwd("/Users/kiraflemke/Desktop/Research Projects/Personal Projects/Housing")
+
+# MVA
+load("balt1.Rdata")
+load("phil1.Rdata")
+
+#tract pop
+load("baltpop.change.Rdata")
+load("baltpop19.trf.Rdata")
+
+load("philpop.change.Rdata")
+load("philpop19.trf.Rdata")
+
+# race
+load("baltrace.Rdata")
+load("baltrace.trf.Rdata")
+
+load("philrace.Rdata")
+load("philrace.trf.Rdata")
+
+mapbox_map <- leaflet() %>%
+  addMapboxTiles(style_id = "streets-v11",
+                 access_token = Mapbox.token,
+                 username = "mapbox",
+                 group = "Base Map",
+                 options = leaflet::tileOptions(minZoom = 10, maxZoom = 15)) 
+
+```
+
+# Home
+
+Row{data-width = 600, data height = 600} 
+----------------------------------------------------------------------
+### Analysis Context 
+
+
+
+
+Having grown up near Baltimore, I immediately felt a sense of comfort and camaraderie with Philadelphians when I moved north in 2016. As I wandered both cities in the intermediate years, I found myself constantly whirling my head around - trying to observe every detail of the vibrant communities that surrounded me. I found much to appreciate, but I also found inequity, displacement, and disillusionment. The cities' residents were steeped in authenticity and resilience but suffered from all-too-familiar resource disparities. This spurred me to take a closer look at what I observed - to put evidence behind my understanding of my two homes.   
+
+Baltimore and Philadelphia are two major Mid-Atlantic cities separated by only a couple hours on I-95 - or even fewer if you’re willing to risk getting caught in a speed trap along the way. Both urban centers are community-rich and, in my opinion, wildly underrated. They also face major housing equity challenges based on the fact that: (1) their populations are majority people of color and (2) they have a history of significant discrimination, particularly in housing. The similar regional characteristics and housing stock of Baltimore and Philly create the opportunity for comparisons that could have significant implications for the future of housing policy.
+
+I found it useful to frame my exploration of city neighborhoods through two distinct but compatible lenses: **racial/ethnic demography and market values**. My metrics include: the ethnic and racial makeup of communities - operationalized as the proportions of white-to-non-white residents - and The Reinvestment Fund's Market Value Analysis, which uses community data to categorize housing markets and identify areas in need of resources and investment. 
+
+Row{data-width = 600, data height = 600} 
+----------------------------------------------------------------------
+### Data
+
+This analysis was performed using R and leaflet with basemaps provided through mapbox api. Data was sourced from the 2010 US Census and subsequent waves of the American Community Survey (ACS). 
+
+* **Non-White** is defined - for the purpose of this analysis - as identifying as any race/ethnicity other than Non-Hispanic Caucasian - this includes African American, Hispanic/Latinx, Asian/Pacific Islander, and Other
+
+*This definition of "nonwhite" is not intended to collapse the unique experiences of each subgroup into a single homogeneous category. It is instead constructed - for the limited scope of this analysis - to highlight the continuing impact of discriminatory housing policy and practices that were explicitly constructed to benefit Non-Hispanic Caucasian individuals - to the detriment of all other groups. Further analysis is warranted into the distinct impact of housing segregation on each racial and ethnic subgroup.*
+
+Additional data was provided by [**The Reinvestment Fund's Market Value Analysis (2015)**](https://www.reinvestment.com/policy-solutions/market-value-analysis/). Census Tract categorizations are based on the following characteristics:
+
+* **Regional Choice** - Highest home sales prices and share of units that are condos. Lowest foreclosure, vacancy and subsidized rental housing rates. High levels of renovation and new construction. Predominantly renters.
+
+* **High Value** -  High sale prices and condo presence, largest incidence of private investor activity and new construction. Notable presence of subsidized units compared to other areas with high home prices. Highest homeownership rate, moderate foreclosure activity, low vacancy and subsidy rates.
+
+* **Steady** - Sales price close to city median, highest share of renters, high permitting activity but low rates of new construction. Higher than average rates of vacancy and subsidy.
+
+* **Transitional** - Median sales prices below city average. Lowest share of permits and little new construction. High homeownership, high foreclosure. Elevated subsidy and vacancy.
+
+* **Stressed** - Highest subsidy usage for renters. Evenly split renters and owners. High foreclosure and vacancy rates. Low sale prices.
+
+* *NA values are applied to areas without sufficient information to generate a categorization and/or that are not categorized as residential*
+
+Row{data-width = 600, data height = 600} 
+----------------------------------------------------------------------
+### Context Sources
+
+Finkelman, Paul. "The Color of Law." (1992): 937.
+
+Fullilove, Mindy Thompson. Root shock: How tearing up city neighborhoods hurts America, and what we can do about it. New Village Press, 2016.
+
+Goldstein, Ira. "Market value analysis: A data-based approach to understanding urban housing markets." Putting Data to Work: Data-Driven Approaches to Strengthening Neighborhoods 49 (2011).
+
+Kromer, John. Fixing broken cities: The implementation of urban development strategies. Routledge, 2009.
+
+Kromer, John. Vacant-property policy and practice: Baltimore and Philadelphia. Brookings Institution Center on Urban and Metropolitan Policy, 2002.
+
+
+# Population
+
+
+### Contrasting Trends
+
+
+
+
+Baltimore and Philadelphia are both Mid-Atlantic post-industrial cities in transition. Both cities experienced population decline throughout the late 90's and early 2000's, however, they are currently experiencing opposite trends in population change. Since the mid-2000’s, Philadelphia’s population has seen steady growth, while Baltimore’s population has continued its overall decline.
+
+
+Row{data-width = 600, data height = 600} 
+----------------------------------------------------------------------
+
+### Baltimore 
+As of 2019, the total population of Baltimore City was 609,032 - down from 622,454 in 2015. The neighborhoods that have seen the most significant declines are *Brooklyn* and *Midtown Edmondson*; both categorized as "stressed" by the Reinvestment Fund's MVA, and *Edgecomb/Parklane*, and *Glenham Belford*, both categorized as "High Value". 
+
+The only area of Baltimore that has seen a major population influx (an increase of over 1000 residents) over the past few years, is the small downtown district along the harbor. There are a few other dispersed neighborhoods that have seen some moderate population increases, but many of these areas are concentrated toward the outskirts of the city limits. 
+
+Row{data-width = 600, data height = 600} 
+----------------------------------------------------------------------
+
+### Census Tract Overview
+
+```{r bal pop, echo=FALSE, warning=FALSE, message=FALSE}
+
+pop_pal <- colorNumeric("Greys", 0:9050)
+
+pop_palc <- colorNumeric("RdBu", -2000:2000)
+
+hterms <- c("Regional Choice", "High Value", "Steady", "Transitional", "Stressed")
+
+pop_pal1t <- colorFactor("Set3", hterms)
+
+mapbox_map %>%
+  addPolygons(data = baltpop19.trf,
+              group = "Population",
+              fillColor = ~pop_pal(estimate),
+              fillOpacity = 0.7,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(estimate, 1)) %>%
+  addLegend(values = c(0,1000,2000,3000,4000,5000,6000,7000),
+            group = "Population",
+            pal = pop_pal,
+            position = "topright",
+            title = "Total Tract Population")%>%
+  addPolygons(data = baltpop.change,
+              group = "Population Change",
+              fillColor = ~pop_palc(diff),
+              fillOpacity = 0.7,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(diff, 1)) %>%
+  addLegend(values = c(-1500,-1000, -500, 0, 500, 1000, 1500),
+            group = "Population Change",
+            pal = pop_palc,
+            position = "topright",
+            title = "Population Change </br> 2015 - 2019") %>%
+  addPolygons(data = baltpop19.trf,
+              group = "Housing Market Typology",
+              stroke = TRUE,
+              color = ~pop_pal1t(hmt2),
+              fill = FALSE,
+              weight = 3,
+              smoothFactor = 0.1,
+              label = baltpop19.trf$hmt2) %>%
+  addLegend(values = balt1$hmt2,
+            pal = pop_pal1t,
+            position = "bottomleft",
+            group = "Housing Market Typology",
+            title = "Housing Market Typology") %>%
+addLayersControl(baseGroups = c("Population", "Population Change"),
+                   overlayGroups = c("Housing Market Typology"),
+                   options = layersControlOptions(collapsed = FALSE),
+                   position = "topleft") 
+
+```
+
+Row{data-width = 600, data height = 600} 
+----------------------------------------------------------------------
+
+### Philadelphia
+As of 2019, the total population of Philadelphia was 1,579,075 up from 1,555,072 in 2015. 
+
+Philadelphia saw noticeable population increases in several areas dispersed throughout the city. Most notably, the population grew in *Graduate Hospital*, *Rittenhouse*, and *Center City*, all categorized by the Reinvestment Fund's MVA as "regional choice". Growth of similar magnitude was seen in the "transitional" areas of *Nothern Liberties* and *Fishtown* and in the "stressed" areas of *Carroll Park* and *Bartram Village*. 
+
+Several neighborhoods closer to the outskirts of the city, particularly to the northeast, have also seen comparable population growth. 
+
+Row{data-width = 600, data height = 600} 
+----------------------------------------------------------------------
+### Census Tract Overview
+
+```{r phil pop, echo=FALSE, warning=FALSE, message=FALSE}
+
+pop_pal <- colorNumeric("Greys", 0:9050)
+
+pop_palc <- colorNumeric("RdBu", -2000:2000)
+
+hterms <- c("Regional Choice", "High Value", "Steady", "Transitional", "Stressed")
+
+pop_pal1t <- colorFactor("Set3", hterms)
+
+mapbox_map %>%
+  addPolygons(data = philpop19.trf,
+              group = "Population",
+              fillColor = ~pop_pal(estimate),
+              fillOpacity = 0.7,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(estimate, 1)) %>%
+  addLegend(values = c(0,1000,2000,3000,4000,5000,6000,7000),
+            group = "Population",
+            pal = pop_pal,
+            position = "topright",
+            title = "Total Tract Population")%>%
+  addPolygons(data = philpop.change,
+              group = "Population Change",
+              fillColor = ~pop_palc(diff),
+              fillOpacity = 0.7,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(diff, 1)) %>%
+  addLegend(values = c(-1500,-1000, -500, 0, 500, 1000, 1500),
+            group = "Population Change",
+            pal = pop_palc,
+            position = "topright",
+            title = "Population Change </br> 2015 - 2019") %>%
+addPolygons(data = philpop19.trf,
+              group = "Housing Market Typology",
+              stroke = TRUE,
+              color = ~pop_pal1t(hmt2),
+              fill = FALSE,
+              weight = 3,
+              smoothFactor = 0.1,
+              label = philpop19.trf$hmt2) %>%
+  addLegend(values = phil1$hmt2,
+            pal = pop_pal1t,
+            position = "bottomleft",
+            group = "Housing Market Typology",
+            title = "Housing Market Typology") %>%
+addLayersControl(baseGroups = c("Population", "Population Change"),
+                   overlayGroups = c("Housing Market Typology"),
+                   options = layersControlOptions(collapsed = FALSE),
+                   position = "topleft") 
+
+```
+Row{data-width = 600, data height = 600} 
+----------------------------------------------------------------------
+
+
+# Race & Segregation 
+### Segregation and Market Disparities 
+
+Residents of both Philadelphia and Baltimore are a majority people of color: the nonwhite population makes up 58% and 69% of the total population of each city, respectively.
+
+The areas of each city categorized as "stressed" house the highest proportion of nonwhite residents, ranging from 80-100%. In contrast, areas of the city with the lowest proportion of nonwhite residents,ranging from 1-40%, are most often categorized as "high value" or "regional choice". These obvious and extreme discrepancies between the housing stability of neighborhoods populated by white vs POC residents demonstrates the enduring impact of explicit and implicit segregation within housing markets. 
+
+Housing segregation is central to the history of all major American cities and governments, and is thus an essential lens for the analysis of modern urban neighborhoods. When applied to Baltimore City and Philadelphia, this framework reveals a remarkable degree of segregation between the non-white and white populations of both cities. 
+
+Row{data-width = 350, data height = 750} 
+-----------------------------------------------------------------------
+### Baltimore
+
+```{r balt race, echo=FALSE, warning=FALSE, message=FALSE}
+
+pop_pal <- colorNumeric("Blues", baltrace$pocprop)
+
+hterms <- c("Regional Choice", "High Value", "Steady", "Transitional", "Stressed")
+
+pop_pal1T <- colorFactor("Set3", hterms)
+
+mapbox_map %>%
+  addPolygons(data = baltrace,
+              fillColor = ~pop_pal(pocprop),
+              fillOpacity = 0.7,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(pocprop, 1)) %>%
+  addLegend(values = baltrace$pocprop,
+            bins = c(seq(0,1,.2)),
+            pal = pop_pal,
+            title = "Proportion of residents </br> that are non-white",
+            position = "bottomleft") %>%
+  addPolygons(data = baltrace.trf,
+              group = "Typology",
+              stroke = TRUE,
+              color = ~pop_pal1T(hmt2),
+              weight = 3,
+              fill = FALSE,
+              smoothFactor = 0.1,
+              label = baltrace.trf$hmt2) %>%
+  addLegend(values = balt1$hmt2,
+            group = "Typology",
+            pal = pop_pal1T,
+            position = "bottomright",
+            title = "Housing Market Typology") %>%
+  addLayersControl(overlayGroups = c("Typology"),
+                   options = layersControlOptions(collapsed = FALSE),
+                   position = "topleft") %>% hideGroup("Typology")
+
+
+
+```
+
+
+### Philadelphia
+
+```{r phil race, echo=FALSE, warning=FALSE, message=FALSE}
+
+pop_pal <- colorNumeric("Blues", philrace$pocprop)
+
+hterms <- c("Regional Choice", "High Value", "Steady", "Transitional", "Stressed")
+
+pop_pal1t <- colorFactor("Set3", hterms)
+
+mapbox_map %>%
+  addPolygons(data = philrace,
+              fillColor = ~pop_pal(pocprop),
+              fillOpacity = 0.7,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(pocprop, 1)) %>%
+  addLegend(values = philrace$pocprop,
+            bins = c(seq(0,1,.2)),
+            pal = pop_pal,
+            title = "Proportion of residents </br> that are non-white",
+            position = "bottomleft")%>%
+  addPolygons(data = philrace.trf,
+              group = "Typology",
+              stroke = TRUE,
+              color = ~pop_pal1t(hmt2),
+              fill = FALSE,
+              weight = 3,
+              smoothFactor = 0.1,
+              label = philrace.trf$hmt2) %>%
+  addLegend(values = phil1$hmt2,
+            pal = pop_pal1t,
+            position = "bottomright",
+            group = "Typology",
+            title = "Housing Market Typology") %>%
+  addLayersControl(overlayGroups = c("Typology"),
+                   options = layersControlOptions(collapsed = FALSE),
+                   position = "topleft") %>% hideGroup("Typology")
+
+```
+
+Row{data-width = 350, data height = 750} 
+-----------------------------------------------------------------------
+### Baltimore 
+Baltimore City incredibly segregated, with its non-white and white populations separated by major roadways, a remnant of explicit infrastructure-enforced segregation. The difference between the average proportion of non-white residents across the entire city and the median non-white proportion per tract is telling: 69% compared to 82%. This 13% difference tells us that there are a few tracts with a high concentration of white residents, while the majority of the city is overwhelmingly populated by people of color.
+
+On one side of major routes - like Falls Road and Greenmount Ave - are tracts comprised of 80-100% people of color. Between these two roadways are mainly tracts with 10-40% people of color, with only a few tracts reaching just 50%. In the above map, this segregation is depicted as alternating light and dark sections fanning out from downtown Baltimore. Tracts surrounding the harbor have even less diversity, with populations that range from 0-30% people of color. This means these areas are 70-100% white. 
+
+This extreme segregation is related to extreme differences in market value between white and non-white communities. On average, neighborhoods categorized as "stressed" by the TRF's MVA are comprised of 93% people of color, while those categorized as "Regional Choice" are only 24% people of color. 
+
+### Philadelphia
+
+Philadelphia shows geographical patterns of segregation similar to those found in Baltimore, however, the relative racial homogeneity of tracts is not as extreme. The difference between Philly's average non-white population per tract and the median is only 4% (58% vs 62%). 
+
+The majority of Philly's non-white population is concentrated in the North and West sections of the city. West Philadelphia - south of 76 and west of University City - houses tracts that are 80-100% people of color. Similarly, North Philadelphia - east of 76 and north of Temple University - has tracts ranging from 70-100% people of color. This results in a similar sectioning effect to that seen in Baltimore.
+
+Another similarity between Philly and Baltimore is the racial disparity in neighborhood housing values perpetuated by regional segregation. In Philadelphia, neighborhoods categorized as "stressed" by the TRF's MVA are comprised of 87% people of color on average, while those categorized as "Regional Choice" are only 30% people of color. 
+
+# Home Ownership & Values
+
+### Home Ownership and Value
+
+The proportion of residents who own their homes is a strong indicator of the stability of a population and housing market accessibility. Additionally, the value of the homes owned indicates the ability of residents to invest and reinvest in their community. These variables are incorporated into the The Reinvestment Fund's Market Value Analysis. 
+
+Overlaying home ownership and values with the proportion of nonwhite residents further characterizes the racial disparities in neighborhood market categorization and the related potential of residents to accrue equity via home ownership. 
+
+The median home value in Baltimore is \$493k compared to \$789k in Philadelphia, suggesting that the cost of living in the latter city is higher on average. 
+
+An average of 46% of Baltimore residents own their homes, compared to 53% of Philadelphia - a relatively even split in both cities. 
+
+Row{data-width = 350, data height = 700} 
+-----------------------------------------------------------------------
+
+### Baltimore
+
+```{r bownv, echo=FALSE, warning=FALSE, message=FALSE, fig.show='hold', out.width='45%'}
+# home 
+load("baltval.Rdata")
+load("baltown.Rdata")
+
+#### Baltimore ####
+
+pop_palx <- colorNumeric("Greens", domain = 30:2500)
+
+pop_pal <- colorNumeric("Greys", domain = 0:1)
+
+pop_palR <- colorBin("Blues", baltrace$pocprop, bins = 4)
+
+hterms <- c("Regional Choice", "High Value", "Steady", "Transitional", "Stressed")
+
+pop_pal1T <- colorFactor("Set3", hterms)
+  
+
+mapbox_map %>%
+  addPolygons(data = baltval,
+              group = "Home Value",
+              fillColor = ~pop_palx(estimate),
+              fillOpacity = 0.6,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(estimate, 1)) %>%
+  addLegend(values = baltval$estimate,
+            group = "Home Value",
+            pal = pop_palx,
+            bins = c(100,500,900,1300,1700,2100),
+            title = "Average </br> Home Value", 
+            position = "bottomright") %>%
+  addPolygons(data = baltown,
+              group = "Owner-Occupied",
+              fillColor = ~pop_pal(ownperc),
+              fillOpacity = 0.5,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(ownperc, 1)) %>%
+  addLegend(values = baltown$ownperc,
+            bins = c(0.25,0.5,0.75,1),
+            group = "Owner-Occupied",
+            pal = pop_pal,
+            title = "Proportion </br> Owner-Occupied", 
+            position = "topright") %>%
+  addPolygons(data = baltrace,
+              group = "Race",
+              stroke = TRUE,
+              color = ~pop_palR(pocprop),
+              weight = 3,
+              fill = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(pocprop, 1)) %>%
+  addLegend(values = baltrace$pocprop,
+            group = "Race",
+            pal = pop_palR,
+            position = "bottomleft",
+            title = "Proportion of residents </br> that are non-white") %>%
+  addLayersControl(baseGroups = c("Home Value", "Owner-Occupied"), 
+                   overlayGroups = c("Race"),
+                   options = layersControlOptions(collapsed = FALSE, autoZIndex = TRUE),
+                   position = "topleft") %>% hideGroup("Race")
+```
+
+### Philadelphia
+```{r pownv1, echo=FALSE, warning=FALSE, message=FALSE, fig.show='hold', out.width='45%'}
+
+load("philval.Rdata")
+load("philown.Rdata")
+
+#### Philadelphia ####
+
+pop_palx <- colorNumeric("Greens", domain = 30:2500)
+
+pop_pal <- colorNumeric("Greys", domain = 0:1)
+
+pop_palR <- colorBin("Blues", philrace$pocprop, bins = 4)
+
+mapbox_map %>%
+  addPolygons(data = philval,
+              group = "Home Value",
+              fillColor = ~pop_palx(estimate),
+              fillOpacity = 0.6,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(estimate, 1)) %>%
+  addLegend(values = philval$estimate,
+            group = "Home Value",
+            pal = pop_palx,
+            bins = c(100,500,900,1300,1700,2100),
+            title = "Average </br> Home Value", 
+            position = "bottomright") %>%
+  addPolygons(data = philown,
+              group = "Owner-Occupied",
+              fillColor = ~pop_pal(ownperc),
+              fillOpacity = 0.5,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(ownperc, 1)) %>%
+  addLegend(values = philown$ownperc,
+            bins = c(0.25,0.5,0.75,1),
+            group = "Owner-Occupied",
+            pal = pop_pal,
+            title = "Proportion </br> Owner-Occupied", 
+            position = "topright") %>%
+  addPolygons(data = philrace,
+              group = "Race",
+              stroke = TRUE,
+              color = ~pop_palR(pocprop),
+              weight = 3,
+              fill = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(pocprop, 1)) %>%
+  addLegend(values = philrace$pocprop,
+            group = "Race",
+            pal = pop_palR,
+            position = "bottomleft",
+            title = "Proportion of residents </br> that are non-white") %>%
+  addLayersControl(baseGroups = c("Home Value", "Owner-Occupied"), 
+                   overlayGroups = c("Race"),
+                   options = layersControlOptions(collapsed = FALSE, autoZIndex = TRUE),
+                   position = "topleft") %>% hideGroup("Race")
+```
+
+Row{data-width = 350, data height = 650} 
+-----------------------------------------------------------------------
+###  Average Home Values by Proportion of non-white residents
+```{r hometab, echo=FALSE, warning=FALSE, message=FALSE, fig.show='hold', out.width='45%'}
+balt.home.table <- cbind.data.frame(c("0-25", "26-50","51-75", "75-100"),
+                                c("$760K" , "$643K", "$567K", "$510K"), 
+                                c(" ", "-15%", "-12%", "-10%"))
+names(balt.home.table) <- c("% of non-white residents", "Avg Home Value", "Change in Value")
+
+
+
+phl.home.table <- cbind.data.frame(c("$1,034K" , "$869K", "$722K", "$815K"), 
+                                c(" ", "-16%", "-17%", "+13%"))
+names(phl.home.table) <- c("Avg Home Value", "Change in Value")
+
+home.tableX <- balt.home.table <- cbind.data.frame(c("0-25", "26-50","51-75", "75-100"), c("$760K" , "$643K", "$567K", "$510K"), c("$1,034K" , "$869K", "$722K", "$815K"))
+names(home.tableX) <- c("% of non-white residents", "Baltimore", "Philadelphia")
+kable(home.tableX)
+```
+#### Relationship between neighboorhood racial composition and home values
+
+In **Baltimore**,  community with 0% residents of color would be expected to have a home value of \$766k, and each percent increase in the proportion of residents that are non-white is associated with a loss of $2.8k in home value.
+
+In **Philadelphia**,  community with 0% residents of color would be expected to have a home value of \$1,002k, and each percent increase in the proportion of residents that are non-white is associated with a loss of $2.6k in home value.
+
+
+Row{data-width = 350, data height = 650}   
+-----------------------------------------------------------------------
+
+# Rent Costs
+
+
+
+### The Cost of Rent
+
+The cost of rent in an area is a major indicator of the local cost of living. However, it is also important to consider, not just the raw cost, but the relative financial burden housing imposes on residents. This is represented by the proportion of of household income dedicated to rent, which is incorporated into the The Reinvestment Fund's Market Value Analysis. 
+
+Considering a neighborhood's average financial strain associated with remaining housed in combination with the proportion of nonwhite residents reveals the higher financial strain faced by communities of color. 
+
+Median rent in Baltimore is \$538/mo compared to \$726/mo in Philadelphia, which translates to 32.2% and 33.7% of renters' monthly income on average.
+
+Row{data-width = 350, data height = 650}   
+-----------------------------------------------------------------------
+### Baltimore
+
+```{r brent1, echo=FALSE, warning=FALSE, message=FALSE, fig.show='hold', out.width='45%'}
+#### Baltimore Rent ####
+
+# rent
+load("baltrent.Rdata")
+load("baltburden.Rdata")
+load("baltrentp.Rdata")
+
+pop_pal <- colorNumeric("RdGy", domain = 100:2100)
+
+pop_palI <- colorNumeric("PuRd", domain = 10:60)
+
+pop_palRO <- colorNumeric("Greys", domain = 0:1, reverse = T)
+
+pop_palR <- colorBin("Blues", baltrace$pocprop, bins = 4)
+
+mapbox_map %>%
+  addPolygons(data = baltrentp,
+              group = "Renter-Occupied",
+              fillColor = ~pop_palRO(rentperc),
+              fillOpacity = 0.6,
+              fill = TRUE,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(rentperc, 1)) %>%
+  addLegend(values = baltrentp$rentperc,
+            group = "Renter-Occupied",
+            bins = c(0.3,0.6,0.9),
+            pal = pop_palRO,
+            position = "topright",
+            title = "Proportion </br> Renter-Occupied")%>%
+  addPolygons(data = baltburden,
+              group = "Rent/Income",
+              stroke = FALSE,
+              fill = TRUE,
+              fillColor = ~pop_palI(estimate),
+              fillOpacity = 0.6,
+              smoothFactor = 0.1,
+              label = ~round(estimate, 1)) %>%
+  addLegend(values = baltburden$estimate,
+            group = "Rent/Income",
+            bins = c(15,25,35,45,55),
+            pal = pop_palI,
+            position = "bottomright",
+            title = "Avg Rent as % of </br> Annual Household Income")  %>%
+  addPolygons(data = baltrent,
+              group = "Rent",
+              fillColor = ~pop_pal(estimate),
+              fillOpacity = 0.6,
+              fill = TRUE,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(estimate, 1)) %>%
+  addLegend(values = baltrent$estimate,
+            group = "Rent",
+            bins = c(500,1000,1500,2000),
+            pal = pop_pal,
+            position = "bottomright",
+            title = "Average Rent")%>%
+  addPolygons(data = baltrace,
+              group = "Race",
+              stroke = TRUE,
+              color = ~pop_palR(pocprop),
+              weight = 3,
+              fill = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(pocprop, 1)) %>%
+  addLegend(values = baltrace$pocprop,
+            group = "Race",
+            pal = pop_palR,
+            position = "bottomleft",
+            title = "Proportion of residents </br> that are non-white") %>%
+  addLayersControl(baseGroups = c("Renter-Occupied","Rent", "Rent/Income"),
+                   overlayGroups = c("Race"),
+                   options = layersControlOptions(collapsed = FALSE),
+                   position = "topleft") %>% hideGroup(c("Race", "Typology"))
+
+
+```
+
+
+### Philadelphia
+```{r prent2, echo=FALSE, warning=FALSE, message=FALSE, fig.show='hold', out.width='45%'}
+#### Philadelphia Rent ####
+
+load("philrent.Rdata")
+load("philburden.Rdata")
+load("philrentp.Rdata")
+
+pop_pal <- colorNumeric("RdGy", domain = 100:2100)
+
+pop_palI <- colorNumeric("PuRd", domain = 10:60)
+
+pop_palRO <- colorNumeric("Greys", domain = 0:1, reverse = T)
+
+pop_palR <- colorBin("Blues", philrace$pocprop, bins = 4)
+
+mapbox_map %>%
+  addPolygons(data = philrentp,
+              group = "Renter-Occupied",
+              fillColor = ~pop_palRO(rentperc),
+              fillOpacity = 0.6,
+              fill = TRUE,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(rentperc, 1)) %>%
+  addLegend(values = philrentp$rentperc,
+            group = "Renter-Occupied",
+            bins = c(0.3,0.6,0.9),
+            pal = pop_palRO,
+            position = "topright",
+            title = "Proportion </br> Renter-Occupied")%>%
+  addPolygons(data = philrent,
+              group = "Rent",
+              fillColor = ~pop_pal(estimate),
+              fillOpacity = 0.6,
+              fill = TRUE,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(estimate, 1)) %>%
+  addLegend(values = philrent$estimate,
+            group = "Rent",
+            bins = c(500,1000,1500,2000),
+            pal = pop_pal,
+            position = "topright",
+            title = "Average Rent")%>%
+  addPolygons(data = philburden,
+              group = "Rent/Income",
+              stroke = FALSE,
+              fill = TRUE,
+              fillColor = ~pop_palI(estimate),
+              fillOpacity = 0.6,
+              smoothFactor = 0.1,
+              label = ~round(estimate, 1)) %>%
+  addLegend(values = philburden$estimate,
+            group = "Rent/Income",
+            bins = c(15,25,35,45,55),
+            pal = pop_palI,
+            position = "topright",
+            title = "Avg Rent as % of </br> Annual Household Income")  %>%
+  addPolygons(data = philrace,
+              group = "Race",
+              stroke = TRUE,
+              color = ~pop_palR(pocprop),
+              weight = 3,
+              fill = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(pocprop, 1)) %>%
+  addLegend(values = philrace$pocprop,
+            group = "Race",
+            pal = pop_palR,
+            position = "bottomleft",
+            title = "Proportion of residents </br> that are non-white") %>%
+  addLayersControl(baseGroups = c("Renter-Occupied", "Rent", "Rent/Income"),
+                   overlayGroups = c("Race"),
+                   options = layersControlOptions(collapsed = FALSE),
+                   position = "topleft") %>% hideGroup("Race")
+
+
+```
+
+
+
+Row{data-width = 350, data height = 650}   
+-----------------------------------------------------------------------
+### Average Rent as a Proportion of Income within Communities of Color
+```{r hometab2, echo=FALSE, warning=FALSE, message=FALSE}
+rent.table <- cbind.data.frame(c("0-25%", "26-50%","51-75%", "75-100%"),
+                                c("24% *" , "30%", "33% *", "36%"),
+                                c("30% *" , "32% *", "38%", "38%"))
+names(rent.table) <- c("Neighboorhood % of non-white residents", "Baltimore", "Philadelphia")
+
+kable(rent.table)
+```
+\*indicates that the value is significantly different than that of the previous group within each city
+
+Row{data-width = 350, data height = 650}   
+-----------------------------------------------------------------------
+# Vacant Properties
+
+### Vacancies in Baltimore and Philadelphia
+
+The loss of housing in a neighborhood facilitates the influx of negative influences and the flight of essential resources, leading to a decline in community health. This decline disproportionately impacts communities of color, contributing to the common "stressed" designation.
+
+Both Baltimore and Philly have unsustainable rates of vacant real estate as a result of their relatively slow economic recovery following the decline of industrial manufacturing in the late twentieth century. Currently, 16% of total properties in Baltimore City are vacant, with a median of 14% of homes per census tract. In Philadelphia, 11% of all properties are vacant, with a median of 9% per tract. 
+
+In many cases, cities rely on private investment for property development, but attracting investors to rehabilitate vacant properties requires public money, which is of limited supply in both Baltimore and Philadelphia. 
+ 
+Row{data-width = 350, data height = 750}   
+-----------------------------------------------------------------------
+### Baltimore
+```{r vacant2, echo=FALSE, warning=FALSE, message=FALSE, fig.show='hold', out.width='45%'}
+
+#### Baltimore Vacancy ####
+
+load("baltvac.Rdata")
+
+pop_palb <- colorNumeric("Reds", baltvac$vacpropb)
+
+pop_palR <- colorBin("Blues", baltrace$pocprop, bins = 4)
+
+hterms <- c("Regional Choice", "High Value", "Steady", "Transitional", "Stressed")
+
+pop_pal1T <- colorFactor("Set3", hterms)
+
+mapbox_map %>%
+  addPolygons(data = baltvac,
+              fillColor = ~pop_palb(vacpropb),
+              group = "Vacancy",
+              fillOpacity = 0.7,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(vacpropb, 1)) %>%
+  addLegend(values = baltvac$vacpropb,
+            group = "Vacancy",
+            pal = pop_palb,
+            bins = c(0.0,0.1,0.2,0.3,0.4,0.5),
+            title = "Proportion of Houses </br> that are Vacant") %>%
+  addPolygons(data = baltrace,
+              group = "Race",
+              stroke = TRUE,
+              color = ~pop_palR(pocprop),
+              weight = 3,
+              fill = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(pocprop, 1)) %>%
+  addLegend(values = baltrace$pocprop,
+            group = "Race",
+            pal = pop_palR,
+            position = "bottomleft",
+            title = "Proportion of residents </br> that are non-white") %>%
+  addPolygons(data = baltpop19.trf,
+              group = "Typology",
+              stroke = TRUE,
+              color = ~pop_pal1T(hmt2),
+              weight = 3,
+              fill = FALSE,
+              smoothFactor = 0.1,
+              label = baltpop19.trf$hmt2) %>%
+  addLegend(values = balt1$hmt2,
+            group = "Typology",
+            pal = pop_pal1T,
+            position = "bottomright",
+            title = "Housing Market Typology")%>%
+  addLayersControl(baseGroups = c("Vacancy"),
+                   overlayGroups = c("Race", "Typology"),
+                   options = layersControlOptions(collapsed = FALSE),
+                   position = "topleft") %>% hideGroup(c("Race", "Typology"))
+
+
+```
+
+### Philadelphia 
+```{r vacant1, echo=FALSE, warning=FALSE, message=FALSE, fig.show='hold', out.width='45%'}
+
+
+#### Philly Vacancy ####
+load("philvac.Rdata")
+
+pop_pala <- colorNumeric("Reds", philvac$vacpropa)
+
+pop_palR <- colorBin("Blues", philrace$pocprop, bins = 4)
+
+hterms <- c("Regional Choice", "High Value", "Steady", "Transitional", "Stressed")
+
+pop_pal1t <- colorFactor("Set3", hterms)
+
+mapbox_map %>%
+  addPolygons(data = philvac,
+              fillColor = ~pop_pala(vacpropa),
+              group = "Vacancy",
+              fillOpacity = 0.7,
+              stroke = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(vacpropa, 1)) %>%
+  addLegend(values = philvac$vacpropa,
+            group = "Vacancy",
+            pal = pop_pala,
+            bins = c(0.0,0.1,0.2,0.3,0.4,0.5),
+            title = "Proportion of Houses </br> that are Vacant") %>%
+  addPolygons(data = philrace,
+              group = "Race",
+              stroke = TRUE,
+              color = ~pop_palR(pocprop),
+              weight = 3,
+              fill = FALSE,
+              smoothFactor = 0.1,
+              label = ~round(pocprop, 1)) %>%
+  addLegend(values = philrace$pocprop,
+            group = "Race",
+            pal = pop_palR,
+            position = "bottomleft",
+            title = "Proportion of residents </br> that are non-white") %>%
+  addPolygons(data = philpop19.trf,
+              group = "Typology",
+              stroke = TRUE,
+              color = ~pop_pal1t(hmt2),
+              fill = FALSE,
+              weight = 3,
+              smoothFactor = 0.1,
+              label = philpop19.trf$hmt2) %>%
+  addLegend(values = phil1$hmt2,
+            pal = pop_pal1t,
+            position = "bottomright",
+            group = "Typology",
+            title = "Housing Market Typology") %>%
+  addLayersControl(baseGroups = c("Vacancy"),
+                   overlayGroups = c("Race", "Typology"),
+                   options = layersControlOptions(collapsed = FALSE),
+                   position = "topleft") %>% hideGroup(c("Race", "Typology"))
+
+
+
+```
+
+Row{data-width = 650, data height = 650}   
+-----------------------------------------------------------------------
+### Contrasting Vacancy Responses and Consequences
+		
+Both Baltimore and Philadelphia experienced a period of decline and disinvestment in the late twentieth century, but in the mid-2000's, Philadelphia was able to begin reversing this trend. In the following decades, the city saw a population influx, which accompanied moderate success of their housing reinvestment efforts. Baltimore's trend of disinvestment continued throughout this time. Thus, while both cities continue to face funding shortages, they are currently experiencing different housing challenges. Baltimore needs to reverse the cycle of housing decline without stumbling into the potential consequence currently faced by Philadelphia neighborhoods: *gentrification*. 
+
+Baltimore City currently faces broad vacancy crisis. Spurred by population decline, local disinvestment, and governmental neglect, this crisis poses a serious threat to the health of Baltimore's neighborhoods. Evidence suggests that the cycle of community decline will continue without intervention.
+
+The state of Philadelphia's vacancy crisis is less widespread. The city has taken active steps over the past decade to attract private investment for property development, however, this effort has often encouraged displacement of communities of color, rather than rehabilitation. In many cases, private property investment has contributed to revitalization of neighborhoods but not communities. 
+
+Racial disparities between neighborhood vacancy rates are a prominent feature of the crises in both cities. Baltimore neighborhoods with a proportion of vacant homes higher than the city's tract average (>= 14%), 76% of residents are people of color - compared to 63% of residents in neighborhoods with below average vacancy. Philadelphia's vacancies represent an even larger disparity with high vacancy tracts (>= 11%) comprised of 69% of residents of color on average - compared to 46% of residents in neighborhoods with below average vacancy. 
